@@ -39,11 +39,20 @@ function App() {
     }
   }, [])
 
+  const handleButtonClick = () => {
+    mapRef.current.flyTo({
+      center: INITIAL_CENTER,
+      zoom: INITIAL_ZOOM,
+    })
+  }
   return (
     <>
       <div className="sidebar">
         Longitude: {center[0].toFixed(4)} | Latitude: {center[1].toFixed(4)} | Zoom: {zoom.toFixed(2)}
       </div>
+      <button className='reset-button' onClick={handleButtonClick}>
+        Reset
+      </button>
       <div id='map-container' ref={mapContainerRef} />
     </>
   )
