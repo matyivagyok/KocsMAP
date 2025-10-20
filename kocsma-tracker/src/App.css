@@ -35,3 +35,52 @@
   border-radius: 10px;
   cursor: pointer;
 }
+
+.info-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 300px; /* Panel szélessége */
+/*  height: 100%;*/
+  background-color: white; /* Legyen fehér háttere, hogy kitakarja a térképet */
+  z-index: 2; /* Legyen a térkép és a sidebar felett */
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); /* Finom árnyék */
+  border-radius: 8px;
+  
+  /* Alapból a képernyőn kívül van (jobbra) */
+  opacity: 0;
+  transform: translateX(20px);
+  transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, visibility 0.3s;
+  box-sizing: border-box;
+  color: #333;
+}
+
+/* Ha megkapja az 'open' osztályt, becsúszik a helyére */
+.info-panel.open {
+  opacity: 1;
+  transform: translateX(0);
+  visibility: visible;
+}
+
+.info-panel h2 {
+  margin-top: 10px;
+  color: #000;
+}
+
+/* Bezárás gomb stílusa */
+.info-panel-close {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  font-weight: bold;
+  cursor: pointer;
+  color: #888;
+}
+
+.info-panel-close:hover {
+  color: #000;
+}
