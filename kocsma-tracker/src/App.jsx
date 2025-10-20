@@ -15,6 +15,9 @@ function App() {
 
   const [center, setCenter] = useState(INITIAL_CENTER)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
+  
+  // ÚJ: State a kiválasztott kocsma tárolására
+  const [selectedKocsma, setSelectedKocsma] = useState(null)
 
   const kocsmak = [
     { id: 1, nev: 'Kocsma Béla', lat: 47.53817, lng: 21.62523, nyitvatartas: '12:00 - 02:00', cim: 'Bem Ter 1' },
@@ -45,29 +48,37 @@ function App() {
       })
     })
 
-        // Add markers for each pub
-
+    // Add markers for each pub
     kocsmak.forEach(kocsma => {
       const marker = new mapboxgl.Marker()
         .setLngLat([kocsma.lng, kocsma.lat])
-        .setPopup(
-          new mapboxgl.Popup({ offset: 25 })
-            .setText(`${kocsma.nev} – Nyitvatartás: ${kocsma.nyitvatartas} – Cím: ${kocsma.cim}`)
-        )
         .addTo(mapRef.current)
+
+      // MÓDOSÍTVA: Popup helyett a marker DOM elemére teszünk egy kattintás eseményt
+      marker.getElement().addEventListener('click', () => {
+        setSelectedKocsma(kocsma); // Beállítjuk a kiválasztott kocsmát
+        // Opcionális: odarepülünk a markerhez közelebbről
+        mapRef.current.flyTo({
+          center: [kocsma.lng, kocsma.lat],
+          zoom: 16
+        });
+      });
     })
 
     return () => {
       mapRef.current.remove()
     }
-  }, [])
+  }, []) // Az üres függőségi lista miatt ez csak egyszer fut le, ami helyes.
 
   const handleButtonClick = () => {
     mapRef.current.flyTo({
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
     })
+    // ÚJ: A reset gomb a panelt is bezárja
+    setSelectedKocsma(null)
   }
+
   return (
     <>
       <div className="sidebar">
@@ -77,6 +88,25 @@ function App() {
         Reset
       </button>
       <div id='map-container' ref={mapContainerRef} />
+
+      {/* ÚJ: Információs panel */}
+      {/* A 'open' osztálynevet attól függően kapja meg, hogy van-e kiválasztott kocsma */}
+      <div className={`info-panel ${selectedKocsma ? 'open' : ''}`}>
+        {selectedKocsma && (
+          <>
+            {/* Bezárás gomb */}
+            <button className="info-panel-close" onClick={() => setSelectedKocsma(null)}>
+              &times; {/* Ez egy 'X' szimbólum */}
+            </button>
+            
+            {/* Kocsma adatai */}
+            <h2>{selectedKocsma.nev}</h2>
+            <p><strong>Cím:</strong> {selectedKocsma.cim}</p>
+            <p><strong>Nyitvatartás:</strong> {selectedKocsma.nyitvatartas}</p>
+            {/* Ide jöhet még több adat... */}
+          </>
+        )}
+      </div>
     </>
   )
 }
