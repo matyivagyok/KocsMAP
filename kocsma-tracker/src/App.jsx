@@ -1,9 +1,9 @@
 import { useRef, useEffect, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 
-// Firestore funkciók bővítése: deleteDoc és doc importálása a törléshez
+// Firestore funkciók bővítése: updateDoc importálása a szerkesztéshez
 import { db } from './firebase' 
-import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore'
+import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc } from 'firebase/firestore'
 
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './App.css'
@@ -22,11 +22,14 @@ function App() {
   const [selectedKocsma, setSelectedKocsma] = useState(null)
   const [kocsmak, setKocsmak] = useState([])
 
-  // State-ek a hozzáadáshoz
+  // State-ek a hozzáadáshoz és szerkesztéshez
   const [isAddingMode, setIsAddingMode] = useState(false) 
-  const [newLocation, setNewLocation] = useState(null)
-  // MÓDOSÍTÁS: A formData mostantól nyitvatartasStart és nyitvatartasEnd mezőket is tartalmaz
+  const [isEditing, setIsEditing] = useState(false) // Szerkesztünk éppen?
+  const [editingId, setEditingId] = useState(null) // Melyik ID-t szerkesztjük?
+  
+  // Űrlap adatok (közös a hozzáadáshoz és szerkesztéshez)
   const [formData, setFormData] = useState({ nev: '', cim: '', nyitvatartasStart: '12:00', nyitvatartasEnd: '00:00' }) 
+  const [formLocation, setFormLocation] = useState(null) // Koordináták az űrlaphoz
 
   // Adatok lekérése
   const fetchKocsmak = async () => {
@@ -63,7 +66,9 @@ function App() {
     mapRef.current.on('click', (e) => {
       if (window.isAddingModeGlobal) {
         const { lng, lat } = e.lngLat;
-        setNewLocation({ lng, lat });
+        setFormLocation({ lng, lat }); // Beállítjuk az új hely koordinátáit
+        setIsEditing(false); // Ez biztosan új hozzáadás, nem szerkesztés
+        setFormData({ nev: '', cim: '', nyitvatartasStart: '12:00', nyitvatartasEnd: '00:00' }); // Üres űrlap
         window.isAddingModeGlobal = false; 
         setIsAddingMode(false); 
       }
@@ -100,6 +105,9 @@ function App() {
         marker.getElement().addEventListener('click', (e) => {
           e.stopPropagation(); 
           setSelectedKocsma(kocsma);
+          // Bezárjuk az űrlapot ha nyitva lenne, hogy ne zavarjon
+          setFormLocation(null);
+          
           mapRef.current.flyTo({
             center: [kocsma.lng, kocsma.lat],
             zoom: 16
@@ -117,25 +125,44 @@ function App() {
       zoom: INITIAL_ZOOM,
     })
     setSelectedKocsma(null)
+    setFormLocation(null)
   }
 
-  // Új hely mentése
-  const handleSaveNewPlace = async () => {
-    if (!formData.nev || !newLocation) return;
+  // --- MENTÉS (Létrehozás VAGY Frissítés) ---
+  const handleSave = async () => {
+    if (!formData.nev || !formLocation) return;
 
-    // MÓDOSÍTÁS: Összerakjuk a stringet a két időpontból
     const fullNyitvatartas = `${formData.nyitvatartasStart} - ${formData.nyitvatartasEnd}`;
 
     try {
-      await addDoc(collection(db, "kocsmak"), {
-        nev: formData.nev,
-        cim: formData.cim,
-        nyitvatartas: fullNyitvatartas, // A kombinált stringet mentjük el
-        lat: newLocation.lat,
-        lng: newLocation.lng
-      });
+      if (isEditing && editingId) {
+        // --- SZERKESZTÉS ÁGA ---
+        const kocsmaRef = doc(db, "kocsmak", editingId);
+        await updateDoc(kocsmaRef, {
+          nev: formData.nev,
+          cim: formData.cim,
+          nyitvatartas: fullNyitvatartas,
+          // A koordinátákat is frissíthetnénk, de most feltételezzük, hogy az nem változik szerkesztéskor
+          // Ha szeretnéd, hogy a marker áthelyezhető legyen, az bonyolultabb logika
+        });
+        console.log("Sikeres frissítés!");
+        setSelectedKocsma(null); // Bezárjuk az infó panelt, mert frissül a lista
+      } else {
+        // --- ÚJ HOZZÁADÁS ÁGA ---
+        await addDoc(collection(db, "kocsmak"), {
+          nev: formData.nev,
+          cim: formData.cim,
+          nyitvatartas: fullNyitvatartas,
+          lat: formLocation.lat,
+          lng: formLocation.lng
+        });
+        console.log("Sikeres létrehozás!");
+      }
       
-      setNewLocation(null); 
+      // Takarítás
+      setFormLocation(null); 
+      setEditingId(null);
+      setIsEditing(false);
       setFormData({ nev: '', cim: '', nyitvatartasStart: '12:00', nyitvatartasEnd: '00:00' }); 
       fetchKocsmak(); 
     } catch (e) {
@@ -157,6 +184,31 @@ function App() {
     }
   }
 
+  // --- SZERKESZTÉS INDÍTÁSA ---
+  const startEditing = (kocsma) => {
+    // Kinyerjük az időpontokat a stringből (pl. "12:00 - 02:00")
+    let start = '12:00';
+    let end = '00:00';
+    if (kocsma.nyitvatartas && kocsma.nyitvatartas.includes(' - ')) {
+      const parts = kocsma.nyitvatartas.split(' - ');
+      start = parts[0];
+      end = parts[1];
+    }
+
+    setFormData({
+      nev: kocsma.nev,
+      cim: kocsma.cim,
+      nyitvatartasStart: start,
+      nyitvatartasEnd: end
+    });
+    setFormLocation({ lat: kocsma.lat, lng: kocsma.lng }); // Csak hogy legyen érvényes location az űrlaphoz
+    setEditingId(kocsma.id);
+    setIsEditing(true);
+    
+    // Bezárjuk az infó panelt és megnyitjuk az űrlapot
+    setSelectedKocsma(null);
+  }
+
   return (
     <>
       <div className="sidebar">
@@ -169,14 +221,22 @@ function App() {
 
       <button 
         className={`add-button ${isAddingMode ? 'active' : ''}`}
-        onClick={() => setIsAddingMode(!isAddingMode)}
+        onClick={() => {
+          setIsAddingMode(!isAddingMode);
+          // Ha épp szerkesztettünk valamit, lépjünk ki belőle
+          if (formLocation) {
+            setFormLocation(null);
+            setIsEditing(false);
+          }
+        }}
       >
-        {isAddingMode ? 'Kattints a térképre!' : 'Kocsma hozzáadása'}
+        {isAddingMode ? 'Kattints a térképre!' : '+ Új hely'}
       </button>
 
-      {newLocation && (
+      {/* ŰRLAP (Közös a hozzáadáshoz és szerkesztéshez) */}
+      {formLocation && (
         <div className="add-form-panel">
-          <h3>Új kocsma felvétele</h3>
+          <h3>{isEditing ? 'Kocsma szerkesztése' : 'Új kocsma felvétele'}</h3>
           <input 
             placeholder="Név" 
             value={formData.nev}
@@ -188,7 +248,6 @@ function App() {
             onChange={e => setFormData({...formData, cim: e.target.value})}
           />
           
-          {/* MÓDOSÍTÁS: Időválasztók a string input helyett */}
           <div style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
             <label style={{fontSize: '12px', color: '#666'}}>Nyitvatartás:</label>
             <div style={{display: 'flex', alignItems: 'center', gap: '5px'}}>
@@ -209,8 +268,14 @@ function App() {
           </div>
 
           <div className="form-buttons">
-            <button className="btn-save" onClick={handleSaveNewPlace}>Mentés</button>
-            <button className="btn-cancel" onClick={() => setNewLocation(null)}>Mégse</button>
+            <button className="btn-save" onClick={handleSave}>
+              {isEditing ? 'Frissítés' : 'Mentés'}
+            </button>
+            <button className="btn-cancel" onClick={() => {
+              setFormLocation(null);
+              setIsEditing(false);
+              setEditingId(null);
+            }}>Mégse</button>
           </div>
         </div>
       )}
@@ -228,10 +293,19 @@ function App() {
             <p><strong>Cím:</strong> {selectedKocsma.cim}</p>
             <p><strong>Nyitvatartás:</strong> {selectedKocsma.nyitvatartas}</p>
             
-            <div style={{marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '10px'}}>
+            <div style={{marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '10px', display: 'flex', gap: '10px'}}>
+              {/* ÚJ: Szerkesztés gomb */}
+              <button 
+                className="btn-save" // Újrahasznosítjuk a stílust
+                style={{backgroundColor: '#ffc107', color: '#000', flex: 1}}
+                onClick={() => startEditing(selectedKocsma)}
+              >
+                Szerkesztés
+              </button>
+
               <button 
                 className="btn-cancel" 
-                style={{backgroundColor: '#dc3545', width: '100%'}}
+                style={{backgroundColor: '#dc3545', flex: 1}}
                 onClick={() => handleDeletePlace(selectedKocsma.id)}
               >
                 Törlés
