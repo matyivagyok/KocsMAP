@@ -96,7 +96,7 @@ function App() {
           <>
             {/* Bezárás gomb */}
             <button className="info-panel-close" onClick={() => setSelectedKocsma(null)}>
-              &times; {/* Ez egy 'X' szimbólum */}
+              &times; {/*Ez egy 'X' szimbólum*/}
             </button>
             
             {/* Kocsma adatai */}
