@@ -171,7 +171,7 @@ function App() {
         className={`add-button ${isAddingMode ? 'active' : ''}`}
         onClick={() => setIsAddingMode(!isAddingMode)}
       >
-        {isAddingMode ? 'Kattints a térképre!' : '+ Új hely'}
+        {isAddingMode ? 'Kattints a térképre!' : 'Kocsma hozzáadása'}
       </button>
 
       {newLocation && (
