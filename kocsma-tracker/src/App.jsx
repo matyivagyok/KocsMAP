@@ -25,7 +25,8 @@ function App() {
   // State-ek a hozzáadáshoz
   const [isAddingMode, setIsAddingMode] = useState(false) 
   const [newLocation, setNewLocation] = useState(null)
-  const [formData, setFormData] = useState({ nev: '', cim: '', nyitvatartas: '' }) 
+  // MÓDOSÍTÁS: A formData mostantól nyitvatartasStart és nyitvatartasEnd mezőket is tartalmaz
+  const [formData, setFormData] = useState({ nev: '', cim: '', nyitvatartasStart: '12:00', nyitvatartasEnd: '00:00' }) 
 
   // Adatok lekérése
   const fetchKocsmak = async () => {
@@ -122,33 +123,33 @@ function App() {
   const handleSaveNewPlace = async () => {
     if (!formData.nev || !newLocation) return;
 
+    // MÓDOSÍTÁS: Összerakjuk a stringet a két időpontból
+    const fullNyitvatartas = `${formData.nyitvatartasStart} - ${formData.nyitvatartasEnd}`;
+
     try {
       await addDoc(collection(db, "kocsmak"), {
         nev: formData.nev,
         cim: formData.cim,
-        nyitvatartas: formData.nyitvatartas,
+        nyitvatartas: fullNyitvatartas, // A kombinált stringet mentjük el
         lat: newLocation.lat,
         lng: newLocation.lng
       });
       
       setNewLocation(null); 
-      setFormData({ nev: '', cim: '', nyitvatartas: '' }); 
+      setFormData({ nev: '', cim: '', nyitvatartasStart: '12:00', nyitvatartasEnd: '00:00' }); 
       fetchKocsmak(); 
     } catch (e) {
       console.error("Hiba mentéskor: ", e);
     }
   }
 
-  // --- ÚJ: TÖRLÉS FUNKCIÓ ---
+  // Törlés funkció
   const handleDeletePlace = async (id) => {
     if (confirm("Biztosan törölni szeretnéd ezt a kocsmát?")) {
       try {
-        // Törlés a Firestore-ból az ID alapján
         await deleteDoc(doc(db, "kocsmak", id));
-        
-        // UI frissítése
         setSelectedKocsma(null);
-        fetchKocsmak(); // Lista újratöltése
+        fetchKocsmak(); 
       } catch (e) {
         console.error("Hiba törléskor: ", e);
         alert("Hiba történt a törlés során!");
@@ -186,11 +187,27 @@ function App() {
             value={formData.cim}
             onChange={e => setFormData({...formData, cim: e.target.value})}
           />
-          <input 
-            placeholder="Nyitvatartás (pl. 12:00-22:00)" 
-            value={formData.nyitvatartas}
-            onChange={e => setFormData({...formData, nyitvatartas: e.target.value})}
-          />
+          
+          {/* MÓDOSÍTÁS: Időválasztók a string input helyett */}
+          <div style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
+            <label style={{fontSize: '12px', color: '#666'}}>Nyitvatartás:</label>
+            <div style={{display: 'flex', alignItems: 'center', gap: '5px'}}>
+              <input 
+                type="time" 
+                value={formData.nyitvatartasStart}
+                onChange={e => setFormData({...formData, nyitvatartasStart: e.target.value})}
+                style={{flex: 1}}
+              />
+              <span>-</span>
+              <input 
+                type="time" 
+                value={formData.nyitvatartasEnd}
+                onChange={e => setFormData({...formData, nyitvatartasEnd: e.target.value})}
+                style={{flex: 1}}
+              />
+            </div>
+          </div>
+
           <div className="form-buttons">
             <button className="btn-save" onClick={handleSaveNewPlace}>Mentés</button>
             <button className="btn-cancel" onClick={() => setNewLocation(null)}>Mégse</button>
@@ -211,7 +228,6 @@ function App() {
             <p><strong>Cím:</strong> {selectedKocsma.cim}</p>
             <p><strong>Nyitvatartás:</strong> {selectedKocsma.nyitvatartas}</p>
             
-            {/* ÚJ: Törlés gomb az információs panel alján */}
             <div style={{marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '10px'}}>
               <button 
                 className="btn-cancel" 
