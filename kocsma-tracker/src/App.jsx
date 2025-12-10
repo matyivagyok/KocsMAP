@@ -1,32 +1,34 @@
 import { useRef, useEffect, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 
+// --- FIREBASE IMPORTOK ---
+// Beimportáljuk a 'db'-t a firebase.js fájlból (figyelj a relatív útvonalra: ./)
+import { db } from './firebase' 
+import { collection, getDocs } from 'firebase/firestore'
+
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './App.css'
 
-const INITIAL_CENTER = [
- 21.62601, 47.53184  
-]
+const INITIAL_CENTER = [21.62601, 47.53184]
 const INITIAL_ZOOM = 14.01
 
 function App() {
-  const mapRef = useRef()
-  const mapContainerRef = useRef()
+  const mapRef = useRef(null)
+  const mapContainerRef = useRef(null)
+  const markersRef = useRef([]) // Segítség a markerek törléséhez
 
   const [center, setCenter] = useState(INITIAL_CENTER)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
   
-  // ÚJ: State a kiválasztott kocsma tárolására
   const [selectedKocsma, setSelectedKocsma] = useState(null)
+  
+  // A kocsmák listája mostantól dinamikus, üres tömbről indul
+  const [kocsmak, setKocsmak] = useState([])
 
-  const kocsmak = [
-    { id: 1, nev: 'Kocsma Béla', lat: 47.53817, lng: 21.62523, nyitvatartas: '12:00 - 02:00', cim: 'Bem Ter 1' },
-    { id: 2, nev: 'Söröző Gizi', lat: 47.53738, lng: 21.62537, nyitvatartas: '16:00 - 00:00', cim: 'Peterfia 46' },
-    { id: 3, nev: 'Pub Pista', lat: 47.54092, lng: 21.62500, nyitvatartas: '10:00 - 01:00', cim: 'Peterfia 56' },
-  ]
-
+  // 1. Térkép inicializálása
   useEffect(() => {
     mapboxgl.accessToken = 'pk.eyJ1IjoibWF0eWl2YWd5b2siLCJhIjoiY2tpM2JwajFtMGRvaTJ6cXNqMnhndWliZiJ9.b3f7EIEdmrAsv8V87pjZkQ'
+    
     mapRef.current = new mapboxgl.Map({
       container: mapContainerRef.current,
       center: center,
@@ -35,47 +37,73 @@ function App() {
     });
 
     mapRef.current.on('move', () => {
-      // get the current center coordinates and zoom level from the map
       const mapCenter = mapRef.current.getCenter()
       const mapZoom = mapRef.current.getZoom()
-
-      // update state
-      mapRef.current.on('move', () => {
-        const mapCenter = mapRef.current.getCenter()
-        const mapZoom = mapRef.current.getZoom()
-        setCenter([mapCenter.lng, mapCenter.lat])
-        setZoom(mapZoom)
-      })
-    })
-
-    // Add markers for each pub
-    kocsmak.forEach(kocsma => {
-      const marker = new mapboxgl.Marker()
-        .setLngLat([kocsma.lng, kocsma.lat])
-        .addTo(mapRef.current)
-
-      // MÓDOSÍTVA: Popup helyett a marker DOM elemére teszünk egy kattintás eseményt
-      marker.getElement().addEventListener('click', () => {
-        setSelectedKocsma(kocsma); // Beállítjuk a kiválasztott kocsmát
-        // Opcionális: odarepülünk a markerhez közelebbről
-        mapRef.current.flyTo({
-          center: [kocsma.lng, kocsma.lat],
-          zoom: 16
-        });
-      });
+      setCenter([mapCenter.lng, mapCenter.lat])
+      setZoom(mapZoom)
     })
 
     return () => {
       mapRef.current.remove()
     }
-  }, []) // Az üres függőségi lista miatt ez csak egyszer fut le, ami helyes.
+  }, []) 
+
+  // 2. Adatok lekérése Firebase-ből (aszinkron módon)
+  useEffect(() => {
+    const fetchKocsmak = async () => {
+      try {
+        // Hivatkozás a 'kocsmak' gyűjteményre
+        const querySnapshot = await getDocs(collection(db, "kocsmak"));
+        
+        // Dokumentumok átalakítása objektumokká
+        const data = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data() 
+        }));
+        
+        console.log("Adatok betöltve:", data); // Ellenőrzés a konzolon
+        setKocsmak(data);
+      } catch (error) {
+        console.error("Hiba az adatok lekérésekor:", error);
+      }
+    };
+
+    fetchKocsmak();
+  }, []);
+
+  // 3. Markerek frissítése, ha változik a 'kocsmak' lista
+  useEffect(() => {
+    if (!mapRef.current || kocsmak.length === 0) return;
+
+    // Régi markerek eltávolítása
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = [];
+
+    // Újak kirakása
+    kocsmak.forEach(kocsma => {
+      if (kocsma.lat && kocsma.lng) {
+        const marker = new mapboxgl.Marker()
+          .setLngLat([kocsma.lng, kocsma.lat])
+          .addTo(mapRef.current);
+
+        marker.getElement().addEventListener('click', () => {
+          setSelectedKocsma(kocsma);
+          mapRef.current.flyTo({
+            center: [kocsma.lng, kocsma.lat],
+            zoom: 16
+          });
+        });
+
+        markersRef.current.push(marker);
+      }
+    });
+  }, [kocsmak])
 
   const handleButtonClick = () => {
     mapRef.current.flyTo({
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
     })
-    // ÚJ: A reset gomb a panelt is bezárja
     setSelectedKocsma(null)
   }
 
@@ -89,21 +117,17 @@ function App() {
       </button>
       <div id='map-container' ref={mapContainerRef} />
 
-      {/* ÚJ: Információs panel */}
-      {/* A 'open' osztálynevet attól függően kapja meg, hogy van-e kiválasztott kocsma */}
+      {/* Információs panel */}
       <div className={`info-panel ${selectedKocsma ? 'open' : ''}`}>
         {selectedKocsma && (
           <>
-            {/* Bezárás gomb */}
             <button className="info-panel-close" onClick={() => setSelectedKocsma(null)}>
-              &times; {/*Ez egy 'X' szimbólum*/}
+              &times;
             </button>
             
-            {/* Kocsma adatai */}
             <h2>{selectedKocsma.nev}</h2>
             <p><strong>Cím:</strong> {selectedKocsma.cim}</p>
             <p><strong>Nyitvatartás:</strong> {selectedKocsma.nyitvatartas}</p>
-            {/* Ide jöhet még több adat... */}
           </>
         )}
       </div>
