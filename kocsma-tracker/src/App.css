@@ -84,3 +84,78 @@
 .info-panel-close:hover {
   color: #000;
 }
+
+/* Az új gomb stílusa */
+.add-button {
+  position: absolute;
+  top: 90px; /* A Reset gomb alatt */
+  z-index: 1;
+  left: 12px;
+  padding: 8px 16px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.add-button:hover {
+  background-color: #218838;
+}
+
+.add-button.active {
+  background-color: #dc3545; /* Piros, ha épp hozzáadás módban vagyunk */
+}
+
+/* Az új űrlap stílusa */
+.add-form-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  padding: 20px;
+  z-index: 10;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.add-form-panel h3 {
+  margin-top: 0;
+  color: #333;
+}
+
+.add-form-panel input {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.add-form-panel .form-buttons {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.btn-save {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-cancel {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}

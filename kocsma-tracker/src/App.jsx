@@ -1,10 +1,9 @@
 import { useRef, useEffect, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 
-// --- FIREBASE IMPORTOK ---
-// Beimportáljuk a 'db'-t a firebase.js fájlból (figyelj a relatív útvonalra: ./)
+// Firestore funkciók bővítése: deleteDoc és doc importálása a törléshez
 import { db } from './firebase' 
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore'
 
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './App.css'
@@ -15,17 +14,33 @@ const INITIAL_ZOOM = 14.01
 function App() {
   const mapRef = useRef(null)
   const mapContainerRef = useRef(null)
-  const markersRef = useRef([]) // Segítség a markerek törléséhez
+  const markersRef = useRef([])
 
   const [center, setCenter] = useState(INITIAL_CENTER)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
   
   const [selectedKocsma, setSelectedKocsma] = useState(null)
-  
-  // A kocsmák listája mostantól dinamikus, üres tömbről indul
   const [kocsmak, setKocsmak] = useState([])
 
-  // 1. Térkép inicializálása
+  // State-ek a hozzáadáshoz
+  const [isAddingMode, setIsAddingMode] = useState(false) 
+  const [newLocation, setNewLocation] = useState(null)
+  const [formData, setFormData] = useState({ nev: '', cim: '', nyitvatartas: '' }) 
+
+  // Adatok lekérése
+  const fetchKocsmak = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "kocsmak"));
+      const data = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data() 
+      }));
+      setKocsmak(data);
+    } catch (error) {
+      console.error("Hiba az adatok lekérésekor:", error);
+    }
+  };
+
   useEffect(() => {
     mapboxgl.accessToken = 'pk.eyJ1IjoibWF0eWl2YWd5b2siLCJhIjoiY2tpM2JwajFtMGRvaTJ6cXNqMnhndWliZiJ9.b3f7EIEdmrAsv8V87pjZkQ'
     
@@ -43,50 +58,46 @@ function App() {
       setZoom(mapZoom)
     })
 
+    // Kattintás esemény a térképen (új hely felvételéhez)
+    mapRef.current.on('click', (e) => {
+      if (window.isAddingModeGlobal) {
+        const { lng, lat } = e.lngLat;
+        setNewLocation({ lng, lat });
+        window.isAddingModeGlobal = false; 
+        setIsAddingMode(false); 
+      }
+    });
+
+    fetchKocsmak();
+
     return () => {
       mapRef.current.remove()
     }
   }, []) 
 
-  // 2. Adatok lekérése Firebase-ből (aszinkron módon)
+  // Szinkronizáljuk a React state-et a globális változóval
   useEffect(() => {
-    const fetchKocsmak = async () => {
-      try {
-        // Hivatkozás a 'kocsmak' gyűjteményre
-        const querySnapshot = await getDocs(collection(db, "kocsmak"));
-        
-        // Dokumentumok átalakítása objektumokká
-        const data = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data() 
-        }));
-        
-        console.log("Adatok betöltve:", data); // Ellenőrzés a konzolon
-        setKocsmak(data);
-      } catch (error) {
-        console.error("Hiba az adatok lekérésekor:", error);
-      }
-    };
+    window.isAddingModeGlobal = isAddingMode;
+    if (mapRef.current) {
+      mapRef.current.getCanvas().style.cursor = isAddingMode ? 'crosshair' : 'grab';
+    }
+  }, [isAddingMode]);
 
-    fetchKocsmak();
-  }, []);
-
-  // 3. Markerek frissítése, ha változik a 'kocsmak' lista
+  // Markerek kezelése
   useEffect(() => {
     if (!mapRef.current || kocsmak.length === 0) return;
 
-    // Régi markerek eltávolítása
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
 
-    // Újak kirakása
     kocsmak.forEach(kocsma => {
       if (kocsma.lat && kocsma.lng) {
         const marker = new mapboxgl.Marker()
           .setLngLat([kocsma.lng, kocsma.lat])
           .addTo(mapRef.current);
 
-        marker.getElement().addEventListener('click', () => {
+        marker.getElement().addEventListener('click', (e) => {
+          e.stopPropagation(); 
           setSelectedKocsma(kocsma);
           mapRef.current.flyTo({
             center: [kocsma.lng, kocsma.lat],
@@ -107,17 +118,88 @@ function App() {
     setSelectedKocsma(null)
   }
 
+  // Új hely mentése
+  const handleSaveNewPlace = async () => {
+    if (!formData.nev || !newLocation) return;
+
+    try {
+      await addDoc(collection(db, "kocsmak"), {
+        nev: formData.nev,
+        cim: formData.cim,
+        nyitvatartas: formData.nyitvatartas,
+        lat: newLocation.lat,
+        lng: newLocation.lng
+      });
+      
+      setNewLocation(null); 
+      setFormData({ nev: '', cim: '', nyitvatartas: '' }); 
+      fetchKocsmak(); 
+    } catch (e) {
+      console.error("Hiba mentéskor: ", e);
+    }
+  }
+
+  // --- ÚJ: TÖRLÉS FUNKCIÓ ---
+  const handleDeletePlace = async (id) => {
+    if (confirm("Biztosan törölni szeretnéd ezt a kocsmát?")) {
+      try {
+        // Törlés a Firestore-ból az ID alapján
+        await deleteDoc(doc(db, "kocsmak", id));
+        
+        // UI frissítése
+        setSelectedKocsma(null);
+        fetchKocsmak(); // Lista újratöltése
+      } catch (e) {
+        console.error("Hiba törléskor: ", e);
+        alert("Hiba történt a törlés során!");
+      }
+    }
+  }
+
   return (
     <>
       <div className="sidebar">
         Longitude: {center[0].toFixed(4)} | Latitude: {center[1].toFixed(4)} | Zoom: {zoom.toFixed(2)}
       </div>
+      
       <button className='reset-button' onClick={handleButtonClick}>
         Reset
       </button>
+
+      <button 
+        className={`add-button ${isAddingMode ? 'active' : ''}`}
+        onClick={() => setIsAddingMode(!isAddingMode)}
+      >
+        {isAddingMode ? 'Kattints a térképre!' : '+ Új hely'}
+      </button>
+
+      {newLocation && (
+        <div className="add-form-panel">
+          <h3>Új kocsma felvétele</h3>
+          <input 
+            placeholder="Név" 
+            value={formData.nev}
+            onChange={e => setFormData({...formData, nev: e.target.value})}
+          />
+          <input 
+            placeholder="Cím" 
+            value={formData.cim}
+            onChange={e => setFormData({...formData, cim: e.target.value})}
+          />
+          <input 
+            placeholder="Nyitvatartás (pl. 12:00-22:00)" 
+            value={formData.nyitvatartas}
+            onChange={e => setFormData({...formData, nyitvatartas: e.target.value})}
+          />
+          <div className="form-buttons">
+            <button className="btn-save" onClick={handleSaveNewPlace}>Mentés</button>
+            <button className="btn-cancel" onClick={() => setNewLocation(null)}>Mégse</button>
+          </div>
+        </div>
+      )}
+
       <div id='map-container' ref={mapContainerRef} />
 
-      {/* Információs panel */}
       <div className={`info-panel ${selectedKocsma ? 'open' : ''}`}>
         {selectedKocsma && (
           <>
@@ -128,6 +210,17 @@ function App() {
             <h2>{selectedKocsma.nev}</h2>
             <p><strong>Cím:</strong> {selectedKocsma.cim}</p>
             <p><strong>Nyitvatartás:</strong> {selectedKocsma.nyitvatartas}</p>
+            
+            {/* ÚJ: Törlés gomb az információs panel alján */}
+            <div style={{marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '10px'}}>
+              <button 
+                className="btn-cancel" 
+                style={{backgroundColor: '#dc3545', width: '100%'}}
+                onClick={() => handleDeletePlace(selectedKocsma.id)}
+              >
+                Törlés
+              </button>
+            </div>
           </>
         )}
       </div>
