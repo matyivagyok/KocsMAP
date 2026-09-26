@@ -15,6 +15,7 @@ function App() {
   const mapRef = useRef(null)
   const mapContainerRef = useRef(null)
   const markersRef = useRef([])
+  const isAddingModeRef = useRef(false)
 
   const [center, setCenter] = useState(INITIAL_CENTER)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
@@ -46,7 +47,7 @@ function App() {
   };
 
   useEffect(() => {
-    mapboxgl.accessToken = 'pk.eyJ1IjoibWF0eWl2YWd5b2siLCJhIjoiY2tpM2JwajFtMGRvaTJ6cXNqMnhndWliZiJ9.b3f7EIEdmrAsv8V87pjZkQ'
+    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN
     
     mapRef.current = new mapboxgl.Map({
       container: mapContainerRef.current,
@@ -64,13 +65,12 @@ function App() {
 
     // Kattintás esemény a térképen (új hely felvételéhez)
     mapRef.current.on('click', (e) => {
-      if (window.isAddingModeGlobal) {
+      if (isAddingModeRef.current) {
         const { lng, lat } = e.lngLat;
-        setFormLocation({ lng, lat }); // Beállítjuk az új hely koordinátáit
-        setIsEditing(false); // Ez biztosan új hozzáadás, nem szerkesztés
-        setFormData({ nev: '', cim: '', nyitvatartasStart: '12:00', nyitvatartasEnd: '00:00' }); // Üres űrlap
-        window.isAddingModeGlobal = false; 
-        setIsAddingMode(false); 
+        setFormLocation({ lng, lat });
+        setIsEditing(false);
+        setFormData({ nev: '', cim: '', nyitvatartasStart: '12:00', nyitvatartasEnd: '00:00' });
+        setIsAddingMode(false);
       }
     });
 
@@ -81,9 +81,8 @@ function App() {
     }
   }, []) 
 
-  // Szinkronizáljuk a React state-et a globális változóval
   useEffect(() => {
-    window.isAddingModeGlobal = isAddingMode;
+    isAddingModeRef.current = isAddingMode;
     if (mapRef.current) {
       mapRef.current.getCanvas().style.cursor = isAddingMode ? 'crosshair' : 'grab';
     }
