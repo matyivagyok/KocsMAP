@@ -1,2 +1,5 @@
 # JetBrains IDE settings
 .idea/
+
+# Claude Code local instructions
+CLAUDE.md
